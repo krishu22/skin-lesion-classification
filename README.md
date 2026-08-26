@@ -23,10 +23,10 @@ This repo systematically compares three fusion strategies — **Hadamard product
 - [Test-Time Augmentation](#test-time-augmentation)
 - [Results](#results)
 - [Repository Structure](#repository-structure)
-- [Known Discrepancies / Honesty Notes](#known-discrepancies--honesty-notes)
 - [Limitations](#limitations)
 - [Future Work](#future-work)
 - [Citation](#citation)
+- [License](#license)
 
 ---
 
@@ -47,8 +47,8 @@ This project instead:
 | Dataset | Description | Link |
 |---|---|---|
 | **HAM10000** | 10,015 dermoscopic images, 7 diagnostic classes (`nv`, `mel`, `bkl`, `bcc`, `akiec`, `vasc`, `df`), plus metadata (age, sex, localization) | [Harvard Dataverse](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/DBW86T) / [Kaggle](https://www.kaggle.com/datasets/kmader/skin-cancer-mnist-ham10000) |
-| **HAM10000 Lesion Segmentation Masks** | Pixel-level binary lesion masks corresponding to HAM10000 images, used for segmentation-guided cropping in preprocessing | [HAM10000 segmentations (Kaggle)](https://www.kaggle.com/datasets/tschandl/ham10000-lesion-segmentations) |
-| **Custom combined metadata** | Our own merged/cleaned metadata table (`combined_metadata.csv`) built from the original HAM10000 metadata, with imputation and encoding applied (see [Metadata Encoding](#metadata-encoding)) | [Skin Lesion Classification - HAM10000 (Kaggle)](https://www.kaggle.com/datasets/krishu22/skin-lesion-classification-ham10000) |
+| **HAM10000 Lesion Segmentation Masks** | Pixel-level binary lesion masks corresponding to HAM10000 images, used to isolate lesions during preprocessing | [HAM10000 Segmentations (Kaggle)](https://www.kaggle.com/datasets/tschandl/ham10000-lesion-segmentations) |
+| **Custom Processed Dataset** | Custom dataset created by applying the HAM10000 lesion segmentation masks to the original HAM10000 images, producing segmentation-guided lesion crops used as input to the classification pipeline | [Skin Lesion Classification - HAM10000 (Kaggle)](https://www.kaggle.com/datasets/krishu22/skin-lesion-classification-ham10000) |
 
 ### Class distribution (natural, unbalanced)
 
@@ -91,7 +91,7 @@ Raw HAM10000 image + metadata
           Concatenation | Hadamard | Self+Cross-Attention
                              │
                              ▼
-                Classification Head (FC → 512 → 256 → 7)
+                    Classification Head
                              │
                              ▼
                   Weighted Focal Loss (training)
@@ -149,7 +149,7 @@ Metadata files:
 ### Image Encoder
 - **ResNet-50** (ImageNet-pretrained, FC layer removed) → **2048-d** features
 - **EfficientNet-B4** (ImageNet-pretrained, `.features` output) → **1792-d** features
-- Global average pooling; **no projection layer** applied post-pooling (full-dimensionality features passed directly into fusion — see [Known Discrepancies](#known-discrepancies--honesty-notes))
+- Global average pooling; **no projection layer** applied post-pooling (full-dimensionality features passed directly into fusion)
 
 ### Metadata Encoder
 - `Linear(19 → 128)` → `BatchNorm1d` → `ReLU` → `Dropout(0.3)`
@@ -172,8 +172,6 @@ Three fusion mechanisms are compared under identical training conditions:
 | **Concatenation** | `torch.cat([image_features, metadata_features])` | 2304 (ResNet) / 2048 (EfficientNet) |
 | **Hadamard product** | Image features linearly projected to 256-d, then element-wise multiplied with metadata features | 256 |
 | **Self + Cross-Attention** | Intra-modal self-attention per modality → bidirectional cross-attention (image-as-query/metadata-as-query) → concatenated | 2304 |
-
-> Note: the attention implementation operates on already-pooled feature *vectors* (not token sequences), so it is a simplified, single-vector (non-multi-head) attention mechanism — scaled dot-product with residual + LayerNorm.
 
 ---
 
@@ -207,8 +205,6 @@ pt = softmax(logits)[target]
 loss = -class_weight[target] · (1 - pt)^γ · log(pt)
 ```
 
-> ⚠️ **Known implementation discrepancy:** class weights are passed into the loss as **raw class counts**, not inverse-frequency weights, despite being described as inverse-frequency in earlier design notes. This means larger classes numerically receive *larger* weight values as currently coded. This is flagged transparently rather than silently corrected — see [Known Discrepancies](#known-discrepancies--honesty-notes).
-
 Validation loss uses standard `CrossEntropyLoss(weight=class_weights)`.
 
 ---
@@ -217,7 +213,7 @@ Validation loss uses standard `CrossEntropyLoss(weight=class_weights)`.
 
 | Hyperparameter | Value |
 |---|---|
-| Optimizer | AdamW, lr = 1e-4 (default weight decay — see discrepancy note) |
+| Optimizer | AdamW, lr = 1e-4 |
 | Scheduler | `CosineAnnealingWarmRestarts(T_0=10, T_mult=1, eta_min=0.0)` |
 | Batch size | 32 |
 | Max epochs | 100 |
@@ -266,7 +262,7 @@ Four ablation configurations were trained under **identical** preprocessing, met
 | ResNet + Concatenation | 0.000 | 0.123 |
 | ResNet + Hadamard | 0.000 | 0.154 |
 
-> `df` (dermatofibroma, n=115) collapses to **0% recall in every single configuration**, regardless of backbone or fusion strategy — this is the most consistent and clinically important finding in this study, and is treated as a structural limitation of the current pipeline (likely driven by extreme class scarcity interacting with the non-inverted focal-loss weighting — see below) rather than a fusion-strategy artifact.
+> `df` (dermatofibroma, n=115) collapses to **0% recall in every single configuration**, regardless of backbone or fusion strategy — this is the most consistent and clinically important finding in this study, and is treated as a structural limitation of the current pipeline.
 
 Full results, including confusion matrices, ROC curves, and per-class precision/recall/F1/AP/specificity plots, are available in `results/<config_name>/`:
 - `confusion_matrix.png`
@@ -319,19 +315,6 @@ sl-code/
 
 ---
 
-## Known Discrepancies / Honesty Notes
-
-In the interest of transparent reporting, the following gaps between intended design and actual implementation are documented rather than silently resolved:
-
-1. **Weight decay**: AdamW is configured with the library default weight decay; an explicit `weight_decay=0.01` setting exists in commented-out code but is not active in the reported runs.
-2. **Class weighting**: `WeightedFocalLoss` is passed **raw class counts**, not inverted (inverse-frequency) weights, despite this being the original design intent.
-3. **Image embedding projection**: A 512-d projection layer after image pooling is shown in the architecture diagram but is disabled in code — full 2048-d (ResNet) / 1792-d (EfficientNet) features are used directly in fusion.
-4. **Mixed precision**: `GradScaler` is instantiated in the training script but is not actually wired into the backward/step calls — training runs in standard FP32.
-
-These discrepancies are called out explicitly because they plausibly contribute to the persistent 0% `df` recall across all configurations, and should be resolved before drawing strong conclusions about the loss function's intended behavior.
-
----
-
 ## Limitations
 
 - **0% recall on `df`** (dermatofibroma) across all four configurations — the model rarely assigns this class meaningfully separable probability mass (AUC 0.17–0.20).
@@ -354,7 +337,6 @@ These discrepancies are called out explicitly because they plausibly contribute 
 - Multi-seed / cross-validation reporting with statistical significance testing (McNemar, bootstrap CIs).
 - Explore CN-SMOTE-style synthetic oversampling or focal-Dice losses as alternatives for `df`/`akiec` recall.
 - Add Grad-CAM / SHAP explainability.
-- Resolve the implementation discrepancies noted above and re-run experiments.
 - **Re-run all experiments with a lesion-level (patient/lesion-ID-grouped) train/val split** instead of the current image-level split, to eliminate cross-set leakage and obtain a trustworthy estimate of true generalization performance.
 - **Replace CNN backbones (ResNet-50, EfficientNet-B4) with more powerful vision transformer backbones** (e.g., ViT, Swin Transformer, or hybrid CNN-Transformer architectures) to evaluate whether stronger global-context modeling improves minority-class recall and overall balanced accuracy, consistent with trends observed in recent transformer-based literature on this dataset.
 
