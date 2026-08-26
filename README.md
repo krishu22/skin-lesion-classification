@@ -365,6 +365,6 @@ This work uses the following datasets and data resources:
 
 The code and original materials in this repository are released under the MIT License.
 
-The HAM10000 dataset and lesion segmentation masks are subject to their respective original terms and should be obtained from their original sources. They are not relicensed under this repository's MIT License.
+The original HAM10000 images and lesion segmentation masks are provided by their respective sources and are not covered by this repository's MIT License.
 
-The processed metadata provided in this repository is derived from the HAM10000 dataset; please refer to the original dataset terms when using it.
+The custom processed dataset was created by applying the HAM10000 lesion segmentation masks to the corresponding original images and is provided as part of this research work.
