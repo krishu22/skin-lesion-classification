@@ -4,6 +4,10 @@ A multimodal deep learning pipeline for 7-class skin lesion classification that 
 
 This repo systematically compares three fusion strategies — **Hadamard product**, **self/cross-attention**, and **concatenation** — across two CNN backbones (ResNet-50, EfficientNet-B4), combined with a dedicated preprocessing pipeline (hair removal + lesion segmentation), weighted focal loss, MixUp/CutMix, and 8-transform test-time augmentation (TTA).
 
+📄 **Associated paper:**  
+K. Garg, *Beyond Aggregate Accuracy: Evaluating Fusion Strategies for Skin Lesion Classification Under Natural Class Imbalance*, Zenodo, 2026.  
+[Read the paper](https://doi.org/10.5281/zenodo.22227499)
+
 > **Key finding:** Hadamard fusion (ResNet-50) outperforms attention-based and concatenation-based fusion on this natural-imbalance dataset — **87.57% accuracy, 59.98% balanced accuracy** — while all configurations struggle on extreme minority classes (0% recall on dermatofibroma across every configuration tested).
 
 ---
@@ -344,7 +348,19 @@ sl-code/
 
 ## Citation
 
-If you use this pipeline, implementation, or results, please cite this repository.
+If you use this repository, implementation, or results, please cite the associated paper:
+
+```bibtex
+@misc{garg2026beyondaggregate,
+  author    = {Garg, Krisha},
+  title     = {Beyond Aggregate Accuracy: Evaluating Fusion Strategies for Skin Lesion Classification Under Natural Class Imbalance},
+  year      = {2026},
+  month     = sep,
+  publisher = {Zenodo},
+  doi       = {10.5281/zenodo.22227499},
+  url       = {https://doi.org/10.5281/zenodo.22227499}
+}
+```
 
 ### Datasets
 
